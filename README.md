@@ -87,7 +87,21 @@ The recipe search finishes and is cached under `models/openai_whisper-medium/com
 ```
 Loading/compiling the **palettized 24-layer medium** on ANE is pathologically slow (the `aned` daemon sits at 0% while the sync `withReply:` XPC blocks for many minutes; the python process oscillates idle<->100% CPU = very slow, not a clean deadlock). The **fp16** base compiles on ANE fine — only the **palettized** model triggers it. This step is reached when the tool loads the model for `.mlcomputeplan.json` / prefill generation.
 
-**Next-session options (in order):**
+**➡️ CHOSEN NEXT STEP (decided 2026-07-03): option 2 — uniform 6-bit, no prefill.** Ready to run:
+```bash
+conda activate whisperkit   # env has coremltools 8.3 + sklearn 1.5.1 pinned
+cd <this-repo>
+WANDB_MODE=disabled ~/miniconda3/envs/whisperkit/bin/whisperkit-generate-model \
+  --model-version openai/whisper-medium --output-dir ./models \
+  --generate-quantized-variants --allowed-nbits 6 --force-recipe-nbits \
+  --disable-default-tests
+#   - uniform 6-bit (--force-recipe-nbits) = simpler graph, may compile on ANE faster than mixed-bit
+#   - dropped --generate-decoder-context-prefill-data (that model-load-on-ANE is where it hung)
+# then:  ./verify_model.sh models/<variant>   # expect palettize_lut>0, ~24 layers, ~500MB
+# WATCH: if it still stalls at 0% CPU with aned idle -> same ANE-compile bottleneck -> go to option 4.
+```
+
+**All options (in order):**
 1. Retry **without** `--generate-decoder-context-prefill-data` (removes model-load-on-ANE during generation).
 2. Try a single uniform low bit-width (`--allowed-nbits 6 --force-recipe-nbits`) — simpler palettized graph, may compile faster on ANE.
 3. Try alternate SDPA impls (`--text-decoder-sdpa-implementation`, `--audio-encoder-sdpa-implementation`) that may lower to ANE better.

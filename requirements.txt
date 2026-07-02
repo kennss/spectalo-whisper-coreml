@@ -1,3 +1,5 @@
-# CoreML/ANE conversion — macOS Apple Silicon, Python 3.11.
-# whisperkittools pulls its own deps (coremltools, ane_transformers, openai-whisper, torch CPU/MPS).
-whisperkittools
+# whisperkittools is NOT on PyPI — install from source (macOS Apple Silicon, Python 3.11):
+#   git clone https://github.com/argmaxinc/whisperkittools.git
+#   pip install -e ./whisperkittools
+# It pulls its own deps (coremltools, ane_transformers, openai-whisper, torch CPU/MPS).
+git+https://github.com/argmaxinc/whisperkittools.git

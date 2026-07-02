@@ -12,5 +12,9 @@ models/
 *.bin
 *.mlmodel
 
+# Local whisperkittools clone (build dependency, not part of this repo)
+.wkt/
+whisperkittools/
+
 # macOS
 .DS_Store

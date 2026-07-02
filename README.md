@@ -26,7 +26,7 @@ Argmax's `argmaxinc/whisperkit-coreml` has **no ANE-compressed `medium` (24-laye
 | Base | `openai/whisper-medium` — multilingual, **24 decoder layers**, 769M |
 | Goals | ≥12 & ≤24 layers · minimize hallucination · **better transcription than `small_216MB`** |
 | Compression | Mixed-bit palettization → **~450–500MB** (fits 8GB devices; vs `large-v3_947MB`) |
-| Recipe strategy | **Decoder higher precision (6–8 bit), encoder aggressive (4 bit)** — protect the hallucination-sensitive decoder |
+| Recipe | whisperkittools `--generate-quantized-variants --allowed-nbits 4 6 8` — the **recipe search auto-assigns per-layer bits for WER**, so the hallucination-sensitive TextDecoder keeps more bits automatically (no manual per-component config; do not pass `--force-recipe-nbits`) |
 | ANE | fused `layer_norm` + palettized weights → requires **A14+/M1+** |
 | Output | `openai_whisper-medium_XXXMB` (WhisperKit folder layout) |
 
@@ -37,7 +37,10 @@ Deeper decoder (24 vs small's 12) is the whole point: **lower hallucination _and
 CoreML/ANE conversion requires macOS. A CUDA GPU is **not** used (coremltools targets the Neural Engine, not CUDA). See `convert_medium.sh`.
 
 ```bash
-pip install -r requirements.txt      # Python 3.11, macOS Apple Silicon
+# Python 3.11, macOS Apple Silicon. whisperkittools is NOT on PyPI — install from source.
+conda create -n whisperkit python=3.11 -y && conda activate whisperkit
+git clone https://github.com/argmaxinc/whisperkittools.git
+pip install -e ./whisperkittools
 ./convert_medium.sh
 ```
 

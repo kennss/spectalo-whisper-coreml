@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.python-version
+
+# Model outputs — host weights on Hugging Face, NOT GitHub (too large + app downloads from HF).
+models/
+*.mlpackage/
+*.mlmodelc/
+*.bin
+*.mlmodel
+
+# macOS
+.DS_Store

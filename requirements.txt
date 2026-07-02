@@ -1,0 +1,3 @@
+# CoreML/ANE conversion — macOS Apple Silicon, Python 3.11.
+# whisperkittools pulls its own deps (coremltools, ane_transformers, openai-whisper, torch CPU/MPS).
+whisperkittools

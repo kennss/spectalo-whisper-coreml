@@ -73,11 +73,26 @@ Base conversion of `whisper-medium` **works** (validated: 24 decoder layers + fu
 - Installed by default: **coremltools 9.0**, **scikit-learn 1.9.0** — both too new. coremltools prints `scikit-learn 1.9.0 is not supported ... Disabling` at startup, and the mixed-bit recipe **finishes** (both components get `recipe_results.json`) but the final palettized-model assembly then **sleeps at 0% CPU indefinitely** (repro'd twice, even with `--disable-default-tests` + `WANDB_MODE=disabled`).
 - The argmax `whisperkit-coreml` models were built with **coremltools 8.x**.
 
-**Fix to try next**: pin compatible versions before converting —
+**Version pin (done, did NOT fix the hang):**
 ```bash
-pip install "coremltools>=8.1,<9" "scikit-learn<=1.5.1"
+pip install "coremltools>=8.1,<9" "scikit-learn<=1.5.1"   # -> coremltools 8.3.0, sklearn 1.5.1
 ```
-The recipe search results are cached under `models/openai_whisper-medium/compression_artifacts/`, so a re-run after the version fix should skip the ~long search and go straight to assembly.
+The recipe search finishes and is cached under `models/openai_whisper-medium/compression_artifacts/`.
+
+**Real root cause (stack-sampled the stuck process, 2026-07-03):** the hang is the **Apple Neural Engine AOT compiler**, not coremltools. Main-thread stack:
+```
++[MLModel modelWithContentsOfURL:...]  ->  MLE5Engine loadModelFromCompiledArchive
+->  Espresso e5rt_e5_compiler_compile_from_ir_program  ->  MILCompilerForANE::CompileUsingANEF
+->  -[_ANEClient compileModel:...]  ->  -[_ANEDaemonConnection compileModel:...withReply:]   <-- blocked here
+```
+Loading/compiling the **palettized 24-layer medium** on ANE is pathologically slow (the `aned` daemon sits at 0% while the sync `withReply:` XPC blocks for many minutes; the python process oscillates idle<->100% CPU = very slow, not a clean deadlock). The **fp16** base compiles on ANE fine — only the **palettized** model triggers it. This step is reached when the tool loads the model for `.mlcomputeplan.json` / prefill generation.
+
+**Next-session options (in order):**
+1. Retry **without** `--generate-decoder-context-prefill-data` (removes model-load-on-ANE during generation).
+2. Try a single uniform low bit-width (`--allowed-nbits 6 --force-recipe-nbits`) — simpler palettized graph, may compile faster on ANE.
+3. Try alternate SDPA impls (`--text-decoder-sdpa-implementation`, `--audio-encoder-sdpa-implementation`) that may lower to ANE better.
+4. If ANE compile stays pathological, palettized medium may not be ANE-friendly at 24 layers -> reconsider (small_216MB stays the shipping model).
+> ⚠️ If ANE **compile** hangs during generation, first on-device load could be similarly slow — validate compile time on a target device before shipping.
 
 ## Credits / licenses
 - OpenAI Whisper — MIT

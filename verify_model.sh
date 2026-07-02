@@ -8,8 +8,11 @@
 # @lastUpdated 2026-07-02
 #
 # Usage: ./verify_model.sh <model-dir>
-set -euo pipefail
+set -uo pipefail
 DIR="${1:?usage: verify_model.sh <model-dir>}"
+
+# grep occurrence count that is safe under set -e / pipefail (no-match must not abort).
+count() { grep -o "$1" "$2" 2>/dev/null | wc -l | tr -d ' '; }
 
 echo "== decoder layers (hallucination indicator: deeper = fewer hallucinations) =="
 if [ -f "${DIR}/config.json" ]; then
@@ -17,7 +20,7 @@ if [ -f "${DIR}/config.json" ]; then
 else
   # whisperkittools output has no top-level config.json -> derive from TextDecoder model.mil
   # (fused layer_norm count ~= decoder_layers * 3 + 1: self-attn + cross-attn + ffn per layer, + final norm).
-  ln=$(grep -o 'layer_norm' "${DIR}/TextDecoder.mlmodelc/model.mil" 2>/dev/null | wc -l | tr -d ' ')
+  ln=$(count 'layer_norm' "${DIR}/TextDecoder.mlmodelc/model.mil")
   echo "  (no config.json) TextDecoder fused layer_norm=${ln}  ->  ~$(( (ln - 1) / 3 )) decoder layers"
 fi
 
@@ -25,9 +28,7 @@ echo "== ANE indicators (model.mil) =="
 for m in TextDecoder AudioEncoder; do
   mil="${DIR}/${m}.mlmodelc/model.mil"
   if [ ! -f "${mil}" ]; then echo "  ${m}: (no model.mil)"; continue; fi
-  ln=$(grep -o 'layer_norm' "${mil}" | wc -l | tr -d ' ')
-  rm=$(grep -o 'reduce_mean' "${mil}" | wc -l | tr -d ' ')
-  lut=$(grep -o 'constexpr_lut_to_dense' "${mil}" | wc -l | tr -d ' ')
-  printf "  %-14s fused_layer_norm=%s  reduce_mean=%s  palettize_lut=%s\n" "${m}" "${ln}" "${rm}" "${lut}"
+  printf "  %-14s fused_layer_norm=%s  reduce_mean=%s  palettize_lut=%s\n" \
+    "${m}" "$(count 'layer_norm' "${mil}")" "$(count 'reduce_mean' "${mil}")" "$(count 'constexpr_lut_to_dense' "${mil}")"
 done
 echo "  -> ANE-resident when: fused layer_norm present (NOT decomposed into many reduce_mean) AND palettize_lut > 0"

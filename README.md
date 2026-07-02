@@ -66,7 +66,37 @@ Vs `small_216MB` on the **same CJK clip**: WER **↓** **and** hallucination **�
 - v2 (only if 24-layer is too heavy/slow on 8GB) — distill decoder to ~16–20 layers (requires CUDA training + data).
 - v3 (optional) — CJK fine-tune for higher Japanese/Korean accuracy.
 
-## Build environment — known issue (2026-07-03)
+## ✅ SOLVED (2026-07-03) — palettized 24-layer medium DOES run on ANE
+
+Two fixes together produce a working ANE-resident palettized medium: **`openai_whisper-medium_467MB`** (446 MB, 24 decoder layers, `palettize_lut`>0 on both encoder+decoder).
+
+**Fix 1 — generate with `CPU_ONLY`** so the palettizer's correctness `predict()` (argmaxtools `test_utils.py:308`, default `CPU_AND_NE`) never invokes the ANE compiler *during conversion*. Driver (`.wkt/convert_cpu.py`):
+```python
+import sys, coremltools as ct
+from argmaxtools import test_utils as at
+at.TEST_COMPUTE_UNIT = ct.ComputeUnit.CPU_ONLY   # skip ANE AOT compile during generation
+from scripts.generate_model import cli
+sys.exit(cli())
+```
+
+**Fix 2 — AudioEncoder SDPA = `Cat`** (not the default `SplitHeadsQ`). The default `SplitHeadsQ` encoder graph makes the ANE AOT compiler **hang (>200 s)**; `Cat` (the SDPA the TextDecoder already uses, which always compiled fine) compiles cleanly. **This — not model size/layer-count — was the "medium ANE edge case" Argmax triaged away.**
+
+Working command (from the `.wkt` clone):
+```bash
+WANDB_MODE=disabled python convert_cpu.py \
+  --model-version openai/whisper-medium --output-dir ../models \
+  --generate-quantized-variants --allowed-nbits 4 --allowed-nbits 6 --allowed-nbits 8 \
+  --audio-encoder-sdpa-implementation Cat
+```
+
+**Measured ANE compile times** (Mac M1 Max, `CompiledMLModel(path, ct.ComputeUnit.CPU_AND_NE)`, first load; cached after):
+- TextDecoder **12.5 s** · AudioEncoder(`Cat`) **81 s** · (`SplitHeadsQ` AudioEncoder = >200 s hang)
+
+**Still to validate before shipping:** on-device (iPhone/iPad A14+) first-load compile time; transcription WER/quality vs `small_216MB`; memory on 8 GB devices.
+
+---
+
+## Build environment — the hang, diagnosed (superseded by SOLVED above)
 
 Base conversion of `whisper-medium` **works** (validated: 24 decoder layers + fused `layer_norm` = ANE-ready). But the **quantized/palettization step hangs at final assembly** with bleeding-edge deps:
 

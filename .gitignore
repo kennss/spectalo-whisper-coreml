@@ -7,10 +7,13 @@ venv/
 
 # Model outputs — host weights on Hugging Face, NOT GitHub (too large + app downloads from HF).
 models/
+models_*/
 *.mlpackage/
 *.mlmodelc/
 *.bin
 *.mlmodel
+*.npy
+*.mlcomputeplan.json
 
 # Local whisperkittools clone (build dependency, not part of this repo)
 .wkt/

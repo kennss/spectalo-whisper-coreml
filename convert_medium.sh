@@ -27,15 +27,20 @@ export MODEL_REPO_ID="${MODEL_REPO_ID:-calidalab/spectalo-whisper-coreml}"
 echo "== Converting ${MODEL_VERSION} -> mixed-bit palettized CoreML (WhisperKit) =="
 echo "   output: ${OUTPUT_DIR}   (models/ is git-ignored; weights go to HF, not GitHub)"
 
-whisperkit-generate-model \
-  --model-version "${MODEL_VERSION}" \
-  --output-dir "${OUTPUT_DIR}" \
-  --generate-quantized-variants \
-  --allowed-nbits 4 --allowed-nbits 6 --allowed-nbits 8 \
-  --generate-decoder-context-prefill-data
+# WORKING RECIPE (2026-07-03, see README "SOLVED"):
+#   - run via convert_cpu.py (CPU_ONLY) so the palettizer predict never hits the ANE compiler (hangs otherwise)
+#   - --audio-encoder-sdpa-implementation Cat  (default SplitHeadsQ makes the AudioEncoder ANE compile hang)
+#   - copy convert_cpu.py into the whisperkittools clone, then run from there:
+cp convert_cpu.py .wkt/ 2>/dev/null || true
+( cd .wkt && WANDB_MODE=disabled python convert_cpu.py \
+    --model-version "${MODEL_VERSION}" \
+    --output-dir "../${OUTPUT_DIR#./}" \
+    --generate-quantized-variants \
+    --allowed-nbits 4 --allowed-nbits 6 --allowed-nbits 8 \
+    --audio-encoder-sdpa-implementation Cat )
 
-# The recipe emits several mixed-bit variants at different size/WER points (like argmax's _547MB vs _626MB).
-# Pick the one nearest ~450-500MB that passes verify_model.sh + on-device WER/hallucination checks.
+# Produces mixed-bit variants (~467MB). verify_model.sh should show palettize_lut>0 + ~24 layers.
+# Confirm ANE compile: python -c "import coremltools as ct; ct.models.CompiledMLModel('<dir>/AudioEncoder.mlmodelc', ct.ComputeUnit.CPU_AND_NE)"
 echo ""
 echo "Generated variants under ${OUTPUT_DIR}. Verify each candidate:"
 echo "  ./verify_model.sh ${OUTPUT_DIR}/<variant-folder>"

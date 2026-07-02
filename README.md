@@ -66,6 +66,19 @@ Vs `small_216MB` on the **same CJK clip**: WER **↓** **and** hallucination **�
 - v2 (only if 24-layer is too heavy/slow on 8GB) — distill decoder to ~16–20 layers (requires CUDA training + data).
 - v3 (optional) — CJK fine-tune for higher Japanese/Korean accuracy.
 
+## Build environment — known issue (2026-07-03)
+
+Base conversion of `whisper-medium` **works** (validated: 24 decoder layers + fused `layer_norm` = ANE-ready). But the **quantized/palettization step hangs at final assembly** with bleeding-edge deps:
+
+- Installed by default: **coremltools 9.0**, **scikit-learn 1.9.0** — both too new. coremltools prints `scikit-learn 1.9.0 is not supported ... Disabling` at startup, and the mixed-bit recipe **finishes** (both components get `recipe_results.json`) but the final palettized-model assembly then **sleeps at 0% CPU indefinitely** (repro'd twice, even with `--disable-default-tests` + `WANDB_MODE=disabled`).
+- The argmax `whisperkit-coreml` models were built with **coremltools 8.x**.
+
+**Fix to try next**: pin compatible versions before converting —
+```bash
+pip install "coremltools>=8.1,<9" "scikit-learn<=1.5.1"
+```
+The recipe search results are cached under `models/openai_whisper-medium/compression_artifacts/`, so a re-run after the version fix should skip the ~long search and go straight to assembly.
+
 ## Credits / licenses
 - OpenAI Whisper — MIT
 - Argmax WhisperKit / whisperkittools — MIT

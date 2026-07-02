@@ -12,7 +12,14 @@ set -euo pipefail
 DIR="${1:?usage: verify_model.sh <model-dir>}"
 
 echo "== decoder layers (hallucination indicator: deeper = fewer hallucinations) =="
-python3 -c "import json; c=json.load(open('${DIR}/config.json')); print('  decoder_layers =', c.get('decoder_layers'), '| encoder_layers =', c.get('encoder_layers'), '| vocab =', c.get('vocab_size'))"
+if [ -f "${DIR}/config.json" ]; then
+  python3 -c "import json; c=json.load(open('${DIR}/config.json')); print('  decoder_layers =', c.get('decoder_layers'), '| encoder_layers =', c.get('encoder_layers'), '| vocab =', c.get('vocab_size'))"
+else
+  # whisperkittools output has no top-level config.json -> derive from TextDecoder model.mil
+  # (fused layer_norm count ~= decoder_layers * 3 + 1: self-attn + cross-attn + ffn per layer, + final norm).
+  ln=$(grep -o 'layer_norm' "${DIR}/TextDecoder.mlmodelc/model.mil" 2>/dev/null | wc -l | tr -d ' ')
+  echo "  (no config.json) TextDecoder fused layer_norm=${ln}  ->  ~$(( (ln - 1) / 3 )) decoder layers"
+fi
 
 echo "== ANE indicators (model.mil) =="
 for m in TextDecoder AudioEncoder; do
